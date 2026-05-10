@@ -2,7 +2,12 @@
   <div class="star-entrance-bg">
     <b-jumbotron header="Welcome to our group discussion study!" header-level="4" class="mb-4 shadow-lg entrance-jumbotron">
       <div class="page-indicator text-center mb-1">Page: 1 / 9</div>
-      <div class="content-area bg-white p-4 rounded-lg entrance-content">
+      <div v-if="!identityValid" class="content-area bg-white p-4 rounded-lg entrance-content">
+        <b-alert variant="warning" show class="mb-0">
+          We could not verify your Prolific study link. Please return to Prolific and reopen the study from the original invitation.
+        </b-alert>
+      </div>
+      <div v-else class="content-area bg-white p-4 rounded-lg entrance-content">
         <p class="entrance-section-title">
           In this study, you will be asked to complete a series of tasks, including:
         </p>
@@ -58,6 +63,7 @@ export default {
       worker_id: null,
       study_id: null,
       session_id: null,
+      identityValid: false,
       test_moderator_code: null,
       test_participant_code: null,
       test_policy_number: null,
@@ -77,17 +83,18 @@ export default {
       }
 
       this.$store.commit('assign_platform', {platform: this.platform})
-      let prolificArray = url.split('?')[1].split('&')
-      this.worker_id = prolificArray[0].split('=')[1]
-      this.study_id = prolificArray[1].split('=')[1]
-      this.session_id = prolificArray[2].split('=')[1]
-      this.test = prolificArray[3] ? prolificArray[3].split('=')[1] : 'N'
+      const params = new URL(url).searchParams
+      this.worker_id = params.get('worker_id') || params.get('PROLIFIC_PID')
+      this.study_id = params.get('study_id') || params.get('STUDY_ID')
+      this.session_id = params.get('session_id') || params.get('SESSION_ID')
+      this.identityValid = Boolean(this.worker_id && this.study_id && this.session_id)
+      this.test = params.get('test') || params.get('TEST') || 'N'
       console.log('Test:', this.test)
       if (this.test === 'Y') {
-        this.test_moderator_code = prolificArray[4] ? prolificArray[4].split('=')[1] : 0
-        this.test_participant_code = prolificArray[5] ? prolificArray[5].split('=')[1] : 1
-        this.test_policy_number = prolificArray[6] ? prolificArray[6].split('=')[1] : 1
-        this.test_turn_number = prolificArray[7] ? prolificArray[7].split('=')[1] : 1
+        this.test_moderator_code = params.get('test_moderator_code') || params.get('TEST_MODERATOR_CODE') || 0
+        this.test_participant_code = params.get('test_participant_code') || params.get('TEST_PARTICIPANT_CODE') || 1
+        this.test_policy_number = params.get('test_policy_number') || params.get('TEST_POLICY_NUMBER') || 1
+        this.test_turn_number = params.get('test_turn_number') || params.get('TEST_TURN_NUMBER') || 1
       }
     },
 
@@ -107,7 +114,7 @@ export default {
       // update backend and create subject
       let body = new FormData()
       if (this.$store.state.subject_id === null) { // If no subject id is stored in state, it means this is a new login
-        if (typeof this.worker_id === 'undefined' || this.worker_id === null || this.worker_id === '') {
+        if (!this.identityValid) {
           this.$alert('We could not get your Prolific ID information, please return the HIT.', '', 'warning')
           return
         }
@@ -132,7 +139,8 @@ export default {
             }
           })
           .catch(e => {
-            this.$alert(e.response.data.detail)
+            const data = e.response ? e.response.data : {}
+            this.$alert(data.message || data.detail || 'Error creating subject')
           })
       }
     }
@@ -275,134 +283,6 @@ export default {
     font-size: 1rem;
     padding: 0.7rem 1.5rem;
   }
-}
-.page-indicator {
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: #333;
-  background: #f2f2f2;
-  border-radius: 6px;
-  padding: 6px 18px;
-  display: inline-block;
-  margin-bottom: 12px;
-}
-</style>
-
-<script>
-import axios from 'axios'
-export default {
-  data: function () {
-    return {
-      platform: null,
-      worker_id: null,
-      study_id: null,
-      session_id: null,
-      test_moderator_code: null,
-      test_participant_code: null,
-      test_policy_number: null,
-      test_turn_number: null
-    }
-  },
-  mounted () { // get the worker id, study id, and session id from the URL
-    this.prolific_processor(location.href)
-  },
-  methods: {
-    prolific_processor: function (url) {
-      // https://dev.d1uau7ss3lp78y.amplifyapp.com/qualificationentrance/?PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}&TEST={{%TEST%}}&TEST_MODERATOR_CODE={{%TEST_MODERATOR%}}&TEST_PARTICIPANT_CODE={{%TEST_PARTICIPANT%}}&TEST_POLICY_NUMBER={{%TEST_POLICY%}}&TEST_TURN_NUMBER={{%TEST_TURN%}}
-      if (url.includes('localhost')) {
-        this.platform = 'localhost'
-      } else {
-        this.platform = 'aws'
-      }
-
-      this.$store.commit('assign_platform', {platform: this.platform})
-      let prolificArray = url.split('?')[1].split('&')
-      this.worker_id = prolificArray[0].split('=')[1]
-      this.study_id = prolificArray[1].split('=')[1]
-      this.session_id = prolificArray[2].split('=')[1]
-      this.test = prolificArray[3] ? prolificArray[3].split('=')[1] : 'N'
-      console.log('Test:', this.test)
-      if (this.test === 'Y') {
-        this.test_moderator_code = prolificArray[4] ? prolificArray[4].split('=')[1] : 0
-        this.test_participant_code = prolificArray[5] ? prolificArray[5].split('=')[1] : 1
-        this.test_policy_number = prolificArray[6] ? prolificArray[6].split('=')[1] : 1
-        this.test_turn_number = prolificArray[7] ? prolificArray[7].split('=')[1] : 1
-      }
-    },
-
-    next: function () {
-      // update store
-      if (this.test === 'Y') {
-        this.$store.commit('assign_test_variables', {
-          test: this.test,
-          test_moderator_code: this.test_moderator_code,
-          test_participant_code: this.test_participant_code,
-          test_policy_number: this.test_policy_number,
-          test_turn_number: this.test_turn_number
-        })
-        console.log('Test variables assigned:', this.test_moderator_code, this.test_participant_code, this.test_policy_number, this.test_turn_number)
-      }
-
-      // update backend and create subject
-      let body = new FormData()
-      if (this.$store.state.subject_id === null) { // If no subject id is stored in state, it means this is a new login
-        if (typeof this.worker_id === 'undefined' || this.worker_id === null || this.worker_id === '') {
-          this.$alert('We could not get your Prolific ID information, please return the HIT.', '', 'warning')
-          return
-        }
-        body.append('worker_id', this.worker_id)
-        body.append('study_id', this.study_id)
-        body.append('session_id', this.session_id)
-        body.append('test', this.test)
-        if (this.test === 'Y') {
-          body.append('test_moderator_code', this.test_moderator_code)
-          body.append('test_participant_code', this.test_participant_code)
-          body.append('test_policy_number', this.test_policy_number)
-          body.append('test_turn_number', this.test_turn_number)
-        }
-        console.log(this.$server_url)
-        axios.post(this.$server_url + 'create_subject', body)
-          .then(response => {
-            if (response.data.success === true) {
-              this.$store.commit('assign_subject_id', {subject_id: response.data.subject_id})
-              this.$router.push('/DemograSurvey')
-            } else {
-              this.$alert(response.data.message || 'Error creating subject', '', 'warning')
-            }
-          })
-          .catch(e => {
-            this.$alert(e.response.data.detail)
-          })
-      }
-    }
-  }
-}
-</script>
-
-<style scoped>
-.warning-box {
-  background-color: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 0.25rem;
-  padding: 1rem;
-  margin-bottom: 1rem;
-}
-.page-indicator {
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: #333;
-  background: #f2f2f2;
-  border-radius: 6px;
-  padding: 6px 18px;
-  display: inline-block;
-  margin-bottom: 12px;
-}
-</style>
-
-<style scoped>
-.button-area {
-  text-align: center;
-  margin-top: 20px;
 }
 .page-indicator {
   font-size: 1.1rem;
