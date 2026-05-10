@@ -406,7 +406,7 @@ new Vue({
     },
     webSocketOnMessage (response) {
       const data = JSON.parse(response.data)
-      const message = data.message || data
+      const message = data.message && typeof data.message === 'object' ? data.message : data
       console.log('WebSocket message received:', message)
 
       if (message.code === 101) {
@@ -487,6 +487,24 @@ new Vue({
         }
         // Add to Vuex store
         this.$store.commit('new_message', received_msg)
+        if (received_msg.sender.subject_id === this.$store.state.subject_id) {
+          window.dispatchEvent(new CustomEvent('message-accepted', {
+            detail: {
+              subject_id: received_msg.sender.subject_id,
+              content: received_msg.content
+            }
+          }))
+        }
+      } else if (message.code === 422 || message.error === 'message_rejected_validation') {
+        const required = message.required_meaningful_words || 11
+        const count = message.meaningful_word_count || 0
+        this.$toast.warning(
+          `${message.message || 'Message rejected.'} Required: ${required}; current: ${count}.`,
+          {
+            timeout: 7000,
+            closeOnClick: true
+          }
+        )
       } else if (message.code === 210) { // Turn update
         this.$store.state.current_turn = message.current_turn
         console.log('Current turn:', this.$store.state.current_turn)

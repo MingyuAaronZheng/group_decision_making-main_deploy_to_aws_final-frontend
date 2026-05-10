@@ -208,9 +208,10 @@ import { notifyInactivity } from '@/plugins/notificationService.js'
 import MemberLeftToast from '@/components/MemberLeftToast.vue'
 
 const CUSTOM_FILLER_WORDS = new Set([
-  'um', 'uh', 'er', 'ah', 'like', 'okay', 'right', 'you know', 'i mean',
+  'um', 'uh', 'er', 'ah', 'like', 'okay', 'right',
   'well', 'so', 'anyway', 'basically', 'actually', 'literally', 'just'
 ])
+const CUSTOM_FILLER_PHRASES = ['you know', 'i mean']
 
 export default {
   components: {
@@ -522,12 +523,20 @@ export default {
       }
     },
     countMeaningfulWords (message) {
-      const words = message.toLowerCase().trim().split(/\s+/)
-      // Remove custom filler words
+      let normalized = message.toLowerCase()
+      CUSTOM_FILLER_PHRASES.forEach(phrase => {
+        normalized = normalized.replace(new RegExp(`\\b${phrase}\\b`, 'g'), ' ')
+      })
+      const words = normalized.match(/[a-z0-9]+(?:'[a-z0-9]+)?/g) || []
       const filtered = words.filter(word => !CUSTOM_FILLER_WORDS.has(word))
-      // Count only unique words
       const uniqueWords = new Set(filtered)
       return uniqueWords.size
+    },
+    handleMessageAccepted (event) {
+      const accepted = event.detail || {}
+      if (accepted.subject_id === this.$store.state.subject_id && accepted.content === this.send_out_message) {
+        this.send_out_message = ''
+      }
     },
     sendMessage () {
       this.$store.dispatch('recordActivity')
@@ -540,11 +549,11 @@ export default {
         const meaningfulWordCount = this.countMeaningfulWords(trimmedMessage)
         // console.log('Meaningful word count:', meaningfulWordCount)
         // Set required meaningful word count based on test state
-        const requiredMeaningfulWords = this.$store.state.test === 'Y' ? 3 : 10
+        const requiredMeaningfulWords = this.$store.state.test === 'Y' ? 4 : 11
         if (meaningfulWordCount < requiredMeaningfulWords) {
           // Show error message
           this.$bvToast.toast(
-            `Your message must contain at least ${requiredMeaningfulWords} meaningful words. Filler words don't count. (Currently: ${meaningfulWordCount})`,
+            `Your message must contain more than ${requiredMeaningfulWords - 1} meaningful unique words. Filler words and repeated words don't count. (Currently: ${meaningfulWordCount})`,
             {
               title: 'Message Too Short',
               variant: 'warning',
@@ -563,7 +572,6 @@ export default {
           }
         }
         this.$root.sendWebSocketMessage(send_chat_message)
-        this.send_out_message = ''
       }
     },
     notifyTyping (isTyping) {
@@ -829,8 +837,9 @@ export default {
     window.addEventListener('unload', this.handleUnload)
 
     // Listen for inactivity events
-    // window.addEventListener('show-inactivity-warning', this.showInactivityWarning)
-    // window.addEventListener('remove-inactive-user', this.handleInactiveUser)
+    window.addEventListener('show-inactivity-warning', this.showInactivityWarning)
+    window.addEventListener('remove-inactive-user', this.handleInactiveUser)
+    window.addEventListener('message-accepted', this.handleMessageAccepted)
 
     // Bump activity on any click in the chat room
     this.$el.addEventListener('click', this.bumpActivityOnClick)
@@ -905,8 +914,9 @@ export default {
       this.$toast.dismiss('ready-to-end-warning')
     }
     // Clean up event listeners
-    // window.removeEventListener('show-inactivity-warning', this.showInactivityWarning)
-    // window.removeEventListener('remove-inactive-user', this.handleInactiveUser)
+    window.removeEventListener('show-inactivity-warning', this.showInactivityWarning)
+    window.removeEventListener('remove-inactive-user', this.handleInactiveUser)
+    window.removeEventListener('message-accepted', this.handleMessageAccepted)
     window.removeEventListener('user-typing', this.handleTypingEvent)
     window.removeEventListener('beforeunload', this.handleBeforeUnload)
     window.removeEventListener('unload', this.handleUnload)
